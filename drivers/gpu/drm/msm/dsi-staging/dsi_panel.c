@@ -624,6 +624,17 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 		return -EINVAL;
 	}
 
+	if (panel->bl_config.bl_remap_flag && panel->bl_config.brightness_max_level &&
+			panel->bl_config.bl_max_level) {
+		/*
+		 * map UI brightness into driver backlight level
+		 *    y = kx+b;
+		 */
+		bl_lvl = (panel->bl_config.bl_max_level - panel->bl_config.bl_min_level) * bl_lvl /
+				panel->bl_config.brightness_max_level + panel->bl_config.bl_min_level;
+		pr_debug("bl_lvl: %d\n", bl_lvl);
+	}
+
 	dsi = &panel->mipi_device;
 
 	if (panel->bl_config.bl_inverted_dbv)
@@ -764,7 +775,6 @@ int dsi_panel_set_fod_hbm(struct dsi_panel *panel, bool status)
 int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 {
 	int rc = 0;
-	int bl_dc_min = panel->bl_config.bl_min_level * 2;
 	struct dsi_backlight_config *bl = &panel->bl_config;
 
 	if (panel->host_config.ext_bridge_num)
@@ -773,7 +783,7 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 	pr_debug("backlight type:%d lvl:%d\n", bl->type, bl_lvl);
 
 	if (bl_lvl > 0)
-		bl_lvl = ea_panel_calc_backlight(bl_lvl < bl_dc_min ? bl_dc_min : bl_lvl);
+		bl_lvl = ea_panel_calc_backlight(bl_lvl, panel->bl_config.bl_min_level);
 
 	switch (bl->type) {
 	case DSI_BACKLIGHT_WLED:
@@ -2437,6 +2447,9 @@ static int dsi_panel_parse_bl_config(struct dsi_panel *panel)
 
 	panel->bl_config.dcs_type_ss_eb = utils->read_bool(utils->data,
 			"qcom,mdss-dsi-bl-dcs-type-ss-eb");
+
+	panel->bl_config.bl_remap_flag = utils->read_bool(utils->data,
+			"qcom,mdss-brightness-remap");
 
 	data = utils->get_property(utils->data, "qcom,bl-update-flag", NULL);
 	if (!data) {
